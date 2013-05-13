@@ -1,6 +1,7 @@
 package
 {
 	import flash.display.BitmapData;
+	import flash.events.Event;
 	import flash.filesystem.File;
 	import flash.utils.ByteArray;
 	
@@ -10,6 +11,7 @@ package
 	import starling.core.Starling;
 	import starling.display.Image;
 	import starling.display.Sprite;
+	import starling.text.TextField;
 	import starling.textures.Texture;
 	
 	public class Main extends Sprite
@@ -18,10 +20,30 @@ package
 		private var curFileName:String;
 		private var files:Array;
 		private var index:int;
+		private var inportDir:File;
+		private var exportDir:File;
 		
 		public function Main() 
 		{
-			files = File.applicationDirectory.resolvePath('atfs').getDirectoryListing();
+			inportDir = new File();
+			inportDir.addEventListener(Event.SELECT, onInportDirSelected);
+			inportDir.browseForDirectory("导入");
+		}
+		
+		private function onInportDirSelected(e:Event):void {
+			exportDir = new File();
+			exportDir.addEventListener(Event.SELECT, onExportDirSelected);
+			exportDir.browseForDirectory("导出");
+		}
+		
+		private function onExportDirSelected(e:Event):void {
+			files = inportDir.getDirectoryListing();
+			for (var i:int=0; i<files.length; i++) {
+				if (String(files[i].type).toLowerCase() != '.atf') {
+					files.splice(i, 1);
+					i--;
+				}
+			}
 			index = 0;
 			loadFile(index);
 		}
@@ -55,16 +77,18 @@ package
 				
 				Starling.context.drawToBitmapData(bd);
 				Starling.context.present();
-				var f:File = File.desktopDirectory.resolvePath('pngs/' + curFileName + '.png');
-				FileUtil.savePNGFile(bd, f);
-				trace('>', curFileName + '.png');
+				var file:File = exportDir.resolvePath(curFileName + '.png');
+				FileUtil.savePNGFile(bd, file);
+				trace('>', file.name);
 			} catch (e:Error) {
-				trace('!', curFileName);
+				trace('!', e);
 			}
 			index ++;
 			if (index == files.length) {
 				trace('done');
-				
+				removeChildren();
+				var tx:TextField = new TextField(300, 50, "全部完成", "微软雅黑", 30, 0, true);
+				addChild(tx);
 			} else {
 				loadFile(index);
 			}

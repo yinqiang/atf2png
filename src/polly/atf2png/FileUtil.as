@@ -81,7 +81,7 @@ package polly.atf2png
 			}
 			
 			var bytes:ByteArray = new ByteArray();
-//			bytes.endian  = Endian.LITTLE_ENDIAN;
+			bytes.endian  = Endian.LITTLE_ENDIAN;
 			var fs:FileStream = new FileStream();
 			fs.open(file, FileMode.READ);
 			fs.readBytes(bytes);
