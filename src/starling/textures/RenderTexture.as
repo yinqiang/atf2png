@@ -20,7 +20,6 @@ package starling.textures
     import starling.display.DisplayObject;
     import starling.display.Image;
     import starling.errors.MissingContextError;
-    import starling.utils.getNextPowerOfTwo;
 
     /** A RenderTexture is a dynamic texture onto which you can draw any display object.
      * 
@@ -66,29 +65,30 @@ package starling.textures
         private var mSupport:RenderSupport;
         
         /** helper object */
-        private static var sScissorRect:Rectangle = new Rectangle();
+        private static var sClipRect:Rectangle = new Rectangle();
         
-        /** Creates a new RenderTexture with a certain size. If the texture is persistent, the
-         *  contents of the texture remains intact after each draw call, allowing you to use the
-         *  texture just like a canvas. If it is not, it will be cleared before each draw call.
-         *  Persistancy doubles the required graphics memory! Thus, if you need the texture only 
-         *  for one draw (or drawBundled) call, you should deactivate it. */
+        /** Creates a new RenderTexture with a certain size (in points). If the texture is
+         *  persistent, the contents of the texture remains intact after each draw call, allowing
+         *  you to use the texture just like a canvas. If it is not, it will be cleared before each
+         *  draw call. Persistancy doubles the required graphics memory! Thus, if you need the
+         *  texture only for one draw (or drawBundled) call, you should deactivate it. */
         public function RenderTexture(width:int, height:int, persistent:Boolean=true, scale:Number=-1)
         {
-            if (scale <= 0) scale = Starling.contentScaleFactor; 
-            
-            var nativeWidth:int  = getNextPowerOfTwo(width  * scale);
-            var nativeHeight:int = getNextPowerOfTwo(height * scale);
-            mActiveTexture = Texture.empty(width, height, PMA, true, scale);
+            mActiveTexture = Texture.empty(width, height, PMA, false, true, scale);
+            mActiveTexture.root.onRestore = mActiveTexture.root.clear;
             
             super(mActiveTexture, new Rectangle(0, 0, width, height), true);
             
+            var rootWidth:Number  = mActiveTexture.root.width;
+            var rootHeight:Number = mActiveTexture.root.height;
+            
             mSupport = new RenderSupport();
-            mSupport.setOrthographicProjection(0, 0, nativeWidth/scale, nativeHeight/scale);
+            mSupport.setOrthographicProjection(0, 0, rootWidth, rootHeight);
             
             if (persistent)
             {
-                mBufferTexture = Texture.empty(width, height, PMA, true, scale);
+                mBufferTexture = Texture.empty(width, height, PMA, false, true, scale);
+                mBufferTexture.root.onRestore = mBufferTexture.root.clear;
                 mHelperImage = new Image(mBufferTexture);
                 mHelperImage.smoothing = TextureSmoothing.NONE; // solves some antialias-issues
             }
@@ -98,6 +98,7 @@ package starling.textures
         public override function dispose():void
         {
             mSupport.dispose();
+            mActiveTexture.dispose();
             
             if (isPersistent) 
             {
@@ -116,33 +117,40 @@ package starling.textures
          *                      properties for position, scale, and rotation. If it is not null,
          *                      the object will be drawn in the orientation depicted by the matrix.
          *  @param alpha        The object's alpha value will be multiplied with this value.
-         *  @param antiAliasing This parameter is currently ignored by Stage3D.
          */
-        public function draw(object:DisplayObject, matrix:Matrix=null, alpha:Number=1.0, 
-                             antiAliasing:int=0):void
+        public function draw(object:DisplayObject, matrix:Matrix=null, alpha:Number=1.0):void
         {
             if (object == null) return;
             
             if (mDrawing)
-                render();
+                render(object, matrix, alpha);
             else
-                drawBundled(render, antiAliasing);
-            
-            function render():void
-            {
-                mSupport.loadIdentity();
-                mSupport.blendMode = object.blendMode;
-                
-                if (matrix) mSupport.prependMatrix(matrix);
-                else        mSupport.transformMatrix(object);
-                
-                object.render(mSupport, alpha);
-            }
+                renderBundled(render, object, matrix, alpha);
         }
         
         /** Bundles several calls to <code>draw</code> together in a block. This avoids buffer 
-         *  switches and allows you to draw multiple objects into a non-persistent texture. */
-        public function drawBundled(drawingBlock:Function, antiAliasing:int=0):void
+         *  switches and allows you to draw multiple objects into a non-persistent texture.
+         *  
+         *  @param drawingBlock: a callback with the form: <pre>function():void;</pre>
+         */
+        public function drawBundled(drawingBlock:Function):void
+        {
+            renderBundled(drawingBlock);
+        }
+        
+        private function render(object:DisplayObject, matrix:Matrix=null, alpha:Number=1.0):void
+        {
+            mSupport.loadIdentity();
+            mSupport.blendMode = object.blendMode;
+            
+            if (matrix) mSupport.prependMatrix(matrix);
+            else        mSupport.transformMatrix(object);
+            
+            object.render(mSupport, alpha);
+        }
+        
+        private function renderBundled(renderBlock:Function, object:DisplayObject=null,
+                                       matrix:Matrix=null, alpha:Number=1.0):void
         {
             var context:Context3D = Starling.context;
             if (context == null) throw new MissingContextError();
@@ -160,9 +168,9 @@ package starling.textures
             }
             
             // limit drawing to relevant area
-            sScissorRect.setTo(0, 0, mActiveTexture.nativeWidth, mActiveTexture.nativeHeight);
+            sClipRect.setTo(0, 0, mActiveTexture.width, mActiveTexture.height);
 
-            mSupport.scissorRectangle = sScissorRect;
+            mSupport.pushClipRect(sClipRect);
             mSupport.renderTarget = mActiveTexture;
             mSupport.clear();
             
@@ -177,8 +185,8 @@ package starling.textures
                 mDrawing = true;
                 
                 // draw new objects
-                if (drawingBlock != null)
-                    drawingBlock();
+                if (renderBlock != null)
+                    renderBlock(object, matrix, alpha);
             }
             finally
             {
@@ -186,7 +194,7 @@ package starling.textures
                 mSupport.finishQuadBatch();
                 mSupport.nextFrame();
                 mSupport.renderTarget = null;
-                mSupport.scissorRectangle = null;
+                mSupport.popClipRect();
             }
         }
         

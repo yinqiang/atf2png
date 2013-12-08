@@ -30,20 +30,20 @@ package starling.text
      *  This is what the file format looks like:
      *
      *  <pre> 
-	 *  &lt;font&gt;
-	 *    &lt;info face="BranchingMouse" size="40" /&gt;
-	 *    &lt;common lineHeight="40" /&gt;
-	 *    &lt;pages&gt;  &lt;!-- currently, only one page is supported --&gt;
-	 *      &lt;page id="0" file="texture.png" /&gt;
-	 *    &lt;/pages&gt;
-	 *    &lt;chars&gt;
-	 *      &lt;char id="32" x="60" y="29" width="1" height="1" xoffset="0" yoffset="27" xadvance="8" /&gt;
-	 *      &lt;char id="33" x="155" y="144" width="9" height="21" xoffset="0" yoffset="6" xadvance="9" /&gt;
-	 *    &lt;/chars&gt;
-	 *    &lt;kernings&gt; &lt;!-- Kerning is optional --&gt;
-	 *      &lt;kerning first="83" second="83" amount="-4"/&gt;
-	 *    &lt;/kernings&gt;
-	 *  &lt;/font&gt;
+     *  &lt;font&gt;
+     *    &lt;info face="BranchingMouse" size="40" /&gt;
+     *    &lt;common lineHeight="40" /&gt;
+     *    &lt;pages&gt;  &lt;!-- currently, only one page is supported --&gt;
+     *      &lt;page id="0" file="texture.png" /&gt;
+     *    &lt;/pages&gt;
+     *    &lt;chars&gt;
+     *      &lt;char id="32" x="60" y="29" width="1" height="1" xoffset="0" yoffset="27" xadvance="8" /&gt;
+     *      &lt;char id="33" x="155" y="144" width="9" height="21" xoffset="0" yoffset="6" xadvance="9" /&gt;
+     *    &lt;/chars&gt;
+     *    &lt;kernings&gt; &lt;!-- Kerning is optional --&gt;
+     *      &lt;kerning first="83" second="83" amount="-4"/&gt;
+     *    &lt;/kernings&gt;
+     *  &lt;/font&gt;
      *  </pre>
      *  
      *  Pass an instance of this class to the method <code>registerBitmapFont</code> of the
@@ -71,6 +71,8 @@ package starling.text
         private var mSize:Number;
         private var mLineHeight:Number;
         private var mBaseline:Number;
+        private var mOffsetX:Number;
+        private var mOffsetY:Number;
         private var mHelperImage:Image;
         private var mCharLocationPool:Vector.<CharLocation>;
         
@@ -87,6 +89,7 @@ package starling.text
             
             mName = "unknown";
             mLineHeight = mSize = mBaseline = 14;
+            mOffsetX = mOffsetY = 0.0;
             mTexture = texture;
             mChars = new Dictionary();
             mHelperImage = new Image(texture);
@@ -280,13 +283,6 @@ package starling.text
                             currentX += char.xAdvance;
                             lastCharID = charID;
                             
-                            if (currentLine.length == 1)
-                            {
-                                // the first character is not meant to have an xOffset
-                                currentX -= char.xOffset;
-                                charLocation.x -= char.xOffset;
-                            }
-                            
                             if (charLocation.x + char.width > containerWidth)
                             {
                                 // remove characters and add them again to next line
@@ -331,7 +327,7 @@ package starling.text
                     } // for each char
                 } // if (mLineHeight <= containerHeight)
                 
-                if (autoScale && !finished)
+                if (autoScale && !finished && fontSize > 3)
                 {
                     fontSize -= 1;
                     lines.length = 0;
@@ -357,9 +353,10 @@ package starling.text
                 
                 if (numChars == 0) continue;
                 
-                var lastLocation:CharLocation = line[line.length-1];
-                var right:Number = lastLocation.x + lastLocation.char.width;
                 var xOffset:int = 0;
+                var lastLocation:CharLocation = line[line.length-1];
+                var right:Number = lastLocation.x - lastLocation.char.xOffset 
+                                                  + lastLocation.char.xAdvance;
                 
                 if (hAlign == HAlign.RIGHT)       xOffset =  containerWidth - right;
                 else if (hAlign == HAlign.CENTER) xOffset = (containerWidth - right) / 2;
@@ -367,8 +364,8 @@ package starling.text
                 for (var c:int=0; c<numChars; ++c)
                 {
                     charLocation = line[c];
-                    charLocation.x = scale * (charLocation.x + xOffset);
-                    charLocation.y = scale * (charLocation.y + yOffset);
+                    charLocation.x = scale * (charLocation.x + xOffset + mOffsetX);
+                    charLocation.y = scale * (charLocation.y + yOffset + mOffsetY);
                     charLocation.scale = scale;
                     
                     if (charLocation.char.width > 0 && charLocation.char.height > 0)
@@ -388,7 +385,7 @@ package starling.text
         /** The native size of the font. */
         public function get size():Number { return mSize; }
         
-        /** The height of one line in pixels. */
+        /** The height of one line in points. */
         public function get lineHeight():Number { return mLineHeight; }
         public function set lineHeight(value:Number):void { mLineHeight = value; }
         
@@ -396,8 +393,20 @@ package starling.text
         public function get smoothing():String { return mHelperImage.smoothing; }
         public function set smoothing(value:String):void { mHelperImage.smoothing = value; } 
         
-        /** The baseline of the font. */
+        /** The baseline of the font. This property does not affect text rendering;
+         *  it's just an information that may be useful for exact text placement. */
         public function get baseline():Number { return mBaseline; }
+        public function set baseline(value:Number):void { mBaseline = value; }
+        
+        /** An offset that moves any generated text along the x-axis (in points).
+         *  Useful to make up for incorrect font data. @default 0. */ 
+        public function get offsetX():Number { return mOffsetX; }
+        public function set offsetX(value:Number):void { mOffsetX = value; }
+        
+        /** An offset that moves any generated text along the y-axis (in points).
+         *  Useful to make up for incorrect font data. @default 0. */
+        public function get offsetY():Number { return mOffsetY; }
+        public function set offsetY(value:Number):void { mOffsetY = value; }
     }
 }
 
